@@ -184,18 +184,6 @@ Example (XAMPP):
    DB_USERNAME=root
    DB_PASSWORD=your_mysql_password
    ```
-6. Create the database in MySQL:
-
-   ```bash
-   mysql -u root -p
-   ```
-
-   Then in MySQL:
-
-   ```sql
-   CREATE DATABASE events_management;
-   exit;
-   ```
 
 ## Step 9: Run Initial Migrations
 
