@@ -125,12 +125,8 @@ Example (XAMPP):
    extension=openssl
    extension=pdo_mysql
    extension=mbstring
-   extension=tokenizer
-   extension=xml
-   extension=ctype
-   extension=json
-   extension=bcmath
    extension=fileinfo
+   extension=zip
    ```
 4. Save the file
 5. Restart Apache (if using XAMPP/WAMP)
