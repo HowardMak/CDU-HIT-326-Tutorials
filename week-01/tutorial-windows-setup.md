@@ -56,7 +56,26 @@
 
 ### If using XAMPP/WAMP:
 
-MySQL is included. Skip to Step 3.
+MySQL is included, but the `mysql` command may not be available in your terminal until you add it to PATH.
+
+- XAMPP MySQL client is usually at `C:\xampp\mysql\bin\mysql.exe`
+- WAMP MySQL client is usually under `C:\wamp64\bin\mysql\mysql8.x.x\bin\mysql.exe`
+
+**Option A (recommended): Add MySQL to PATH**
+
+1. Windows search: "Environment Variables" → "Edit the system environment variables"
+2. Click "Environment Variables…"
+3. Under "User variables", select "Path" → "Edit"
+4. Click "New" and add the folder that contains `mysql.exe` (for example `C:\xampp\mysql\bin`)
+5. Click OK to save, then close and reopen your terminal
+
+**Option B: Run `mysql.exe` by full path**
+
+Example (XAMPP):
+
+```bash
+"C:\xampp\mysql\bin\mysql.exe" --version
+```
 
 ### Standalone MySQL Installation:
 
@@ -66,6 +85,11 @@ MySQL is included. Skip to Step 3.
 4. Complete the installation wizard
 5. Set root password (remember this for later)
 6. Configure MySQL to start as a Windows service
+7. Ensure MySQL is on PATH so `mysql` works in a terminal (common folder: `C:\Program Files\MySQL\MySQL Server 8.0\bin`)
+8. Verify the MySQL client works:
+   ```bash
+   mysql --version
+   ```
 
 ## Step 3: Install Composer
 
@@ -118,6 +142,7 @@ MySQL is included. Skip to Step 3.
    ```bash
    mysql -u root -p
    ```
+   If you see `'mysql' is not recognized...`, go back to Step 2 and add MySQL's `bin` folder to PATH (or run `mysql.exe` by full path).
 3. Enter your MySQL root password
 4. You should see the MySQL prompt
 5. Type `exit` to leave MySQL
