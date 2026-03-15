@@ -1,24 +1,57 @@
 # Eloquent Relationships
 
-## Task List Summary
+## Part A: Before You Start
 
-- [ ] **Define User Model Relationships** - Add organizedEvents and registeredEvents relationships
-- [ ] **Define Event Model Relationships** - Add category, organizer, and registrants relationships
-- [ ] **Define Category Model Relationship** - Add events relationship
-- [ ] **Test Relationships in Tinker** - Verify all relationships work correctly
-- [ ] **Implement Many-to-Many Registration** - Use attach/detach for event registrations
-- [ ] **Implement Eager Loading** - Prevent N+1 query problems with with() method
-- [ ] **Add Query Scopes to Event Model** - Create published, upcoming, and byCategory scopes
-- [ ] **Add Accessors and Mutators** - Create fullDateTime accessor and slug mutator
-- [ ] **Test Advanced Queries** - Practice counting, filtering, and whereHas queries
-- [ ] **Access Pivot Table Data** - Retrieve and filter registration status from pivot table
-- [ ] **Add Helper Methods** - Create isFull(), isRegisteredBy(), and other helper methods
+### Prerequisites
 
-## Step 1: Define Basic Relationships
+- **Complete Week 2** (Database Design and Migrations) in full.
+- Migrations must be run (`php artisan migrate`).
+- Seeders must be run (`php artisan db:seed`) so Users, Categories, and Events exist.
+- Models `Category` and `Event` must exist (`app/Models/Category.php`, `app/Models/Event.php`).
 
-### User Model Relationships
+If you skip Week 2 or have not run migrations/seeders, this tutorial will fail.
 
-Open `app/Models/User.php` and add these relationships:
+### Step 0: Model Setup
+
+Before defining relationships, ensure your models have the required configuration.
+
+**Add to `app/Models/Event.php`:**
+
+The `events` table uses soft deletes and the accessors below assume proper casting. Add or confirm:
+
+```php
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Event extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'title', 'slug', 'description', 'date', 'time', 'location',
+        'capacity', 'status', 'image', 'category_id', 'organizer_id',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
+    ];
+}
+```
+
+ **Add to `app/Models/User.php`:** Ensure `'role'` is in the `$fillable` array so the role column can be mass-assigned.
+
+**Add to `app/Models/Category.php`:** Add `$fillable = ['name', 'slug', 'description']` if you use `Category::create()` in seeders.
+
+---
+
+## Part B: Define Relationships
+
+**What you will do:** Edit model files to add relationship methods. No Tinker or terminal execution in this part.
+
+### Step 1: User Model Relationships
+
+ **Add to `app/Models/User.php`**
+
+Ensure `use App\Models\Event;` is at the top (add it if missing), then add these methods:
 
 ```php
 /**
@@ -40,9 +73,18 @@ public function registeredEvents()
 }
 ```
 
-### Event Model Relationships
+### Step 2: Event Model Relationships
 
-Open `app/Models/Event.php` and add:
+**Add to `app/Models/Event.php`**
+
+Ensure these `use` statements exist at the top:
+
+```php
+use App\Models\Category;
+use App\Models\User;
+```
+
+Add these relationship methods:
 
 ```php
 /**
@@ -72,9 +114,11 @@ public function registrants()
 }
 ```
 
-### Category Model Relationship
+### Step 3: Category Model Relationship
 
-Open `app/Models/Category.php` and add:
+ **Add to `app/Models/Category.php`**
+
+Ensure `use App\Models\Event;` is at the top (add it if missing), then add:
 
 ```php
 /**
@@ -86,80 +130,15 @@ public function events()
 }
 ```
 
-## Step 2: Test Relationships in Tinker
+---
 
-Open terminal and run:
+## Part C: Enhance Models
 
-```bash
-php artisan tinker
-```
+**What you will do:** Add query scopes, accessors, mutators, and helper methods to the model files. All edits in this part are file changes—no Tinker.
 
-Then test each relationship:
+### Step 4: Query Scopes
 
-```php
-// Test 1: Get all events organized by user ID 1
-$user = User::find(1);
-$events = $user->organizedEvents;
-dd($events);
-
-// Test 2: Get the organizer of event ID 1
-$event = Event::find(1);
-$organizer = $event->organizer;
-dd($organizer->name);
-
-// Test 3: Get all events in category ID 1
-$category = Category::find(1);
-$events = $category->events;
-dd($events);
-```
-
-## Step 3: Implement Many-to-Many Registration
-
-The relationships are already defined above. Now let's demonstrate how to use them:
-
-```php
-// Register a user for an event
-$user = User::find(1);
-$event = Event::find(1);
-
-$user->registeredEvents()->attach($event->id, [
-    'status' => 'confirmed',
-    'registered_at' => now(),
-]);
-
-// Get user's registered events
-$registeredEvents = $user->registeredEvents;
-foreach ($registeredEvents as $event) {
-    echo $event->title . ' - ' . $event->pivot->status . "\n";
-}
-```
-
-## Step 4: Implement Eager Loading
-
-To prevent N+1 query problems, always use eager loading:
-
-```php
-// Bad: N+1 problem (don't do this)
-$events = Event::all();
-foreach ($events as $event) {
-    echo $event->organizer->name; // Queries database for each event
-    echo $event->category->name;  // Queries database for each event
-}
-
-// Good: Eager loading
-$events = Event::with('organizer', 'category')->get();
-foreach ($events as $event) {
-    echo $event->organizer->name; // No additional queries
-    echo $event->category->name;  // No additional queries
-}
-
-// Nested eager loading
-$events = Event::with('organizer.registeredEvents', 'category')->get();
-```
-
-## Step 5: Add Query Scopes to Event Model
-
-Add these scopes to `app/Models/Event.php`:
+**Add to `app/Models/Event.php`**
 
 ```php
 /**
@@ -187,28 +166,11 @@ public function scopeByCategory($query, $categoryId)
 }
 ```
 
-Use the scopes:
+### Step 5: Accessors and Mutators
 
-```php
-// Get all published upcoming events
-$events = Event::published()->upcoming()->get();
+**Add to `app/Models/Event.php`**
 
-// Get published events in category 1
-$events = Event::published()->byCategory(1)->get();
-
-// Get published upcoming events in category 1, ordered by date
-$events = Event::published()
-    ->upcoming()
-    ->byCategory(1)
-    ->orderBy('date')
-    ->get();
-```
-
-## Step 6: Add Accessors and Mutators
-
-### Accessor Example
-
-Add to `app/Models/Event.php`:
+**Accessor** – formats date and time as a readable string (e.g. "March 15, 2024 at 2:00 PM"):
 
 ```php
 /**
@@ -221,22 +183,13 @@ public function getFullDateTimeAttribute()
 }
 ```
 
-Usage:
-
-```php
-$event = Event::find(1);
-echo $event->full_date_time; // "March 15, 2024 at 2:00 PM"
-```
-
-### Mutator Example (Auto-generate Slug)
-
-Add to `app/Models/Event.php`:
+**Mutator** – auto-generates slug when creating an event:
 
 ```php
 protected static function boot()
 {
     parent::boot();
-  
+
     static::creating(function ($event) {
         if (empty($event->slug)) {
             $event->slug = \Illuminate\Support\Str::slug($event->title);
@@ -245,79 +198,9 @@ protected static function boot()
 }
 ```
 
-## Step 7: Advanced Query Examples
+### Step 6: Helper Methods
 
-### Count Relationships
-
-```php
-// Count events organized by user ID 1
-$count = User::find(1)->organizedEvents()->count();
-
-// Count registrants for event ID 1
-$count = Event::find(1)->registrants()->count();
-
-// Count events in category ID 1
-$count = Category::find(1)->events()->count();
-```
-
-### Filter by Relationship
-
-```php
-// Get events organized by user ID 1 that are published
-$events = User::find(1)
-    ->organizedEvents()
-    ->where('status', 'published')
-    ->get();
-
-// Get users who have registered for event ID 1
-$users = Event::find(1)->registrants;
-
-// Get events that have at least 5 registrations
-$events = Event::has('registrants', '>=', 5)->get();
-```
-
-### Using whereHas
-
-```php
-// Get categories that have at least one published event
-$categories = Category::whereHas('events', function($query) {
-    $query->where('status', 'published');
-})->get();
-
-// Get events that have no registrations
-$events = Event::doesntHave('registrants')->get();
-
-// Get users who have registered for at least one event
-$users = User::has('registeredEvents')->get();
-```
-
-## Step 8: Access Pivot Table Data
-
-```php
-$user = User::find(1);
-$event = Event::find(1);
-
-// Get registration status
-$registeredEvent = $user->registeredEvents()
-    ->where('events.id', $event->id)
-    ->first();
-
-if ($registeredEvent) {
-    $status = $registeredEvent->pivot->status;
-    $registeredAt = $registeredEvent->pivot->registered_at;
-}
-
-// Get user's confirmed registrations only
-$confirmedRegistrations = $user->registeredEvents()
-    ->wherePivot('status', 'confirmed')
-    ->get();
-```
-
-## Step 9: Add Helper Methods
-
-### Event Model Helpers
-
-Add to `app/Models/Event.php`:
+**Add to `app/Models/Event.php`**
 
 ```php
 /**
@@ -336,7 +219,7 @@ public function isFull()
  */
 public function isRegisteredBy($userId)
 {
-    return $this->registrants->contains($userId);
+    return $this->registrants->contains('id', $userId);
 }
 
 /**
@@ -344,15 +227,13 @@ public function isRegisteredBy($userId)
  */
 public function getConfirmedRegistrationsCountAttribute()
 {
-    return $this->registrations()
-        ->where('status', 'confirmed')
+    return $this->registrants()
+        ->wherePivot('status', 'confirmed')
         ->count();
 }
 ```
 
-### User Model Helper
-
-Add to `app/Models/User.php`:
+**Add to `app/Models/User.php`**
 
 ```php
 /**
@@ -360,12 +241,166 @@ Add to `app/Models/User.php`:
  */
 public function isRegisteredFor($eventId)
 {
-    return $this->registeredEvents->contains($eventId);
+    return $this->registeredEvents->contains('id', $eventId);
 }
 ```
 
-## Resources
+---
+
+## Part D: Use Relationships
+
+**What you will do:** Run code in **Tinker** to test and explore the relationships. Open Tinker once and run each block in sequence.
+
+**How to run:** Open terminal, run `php artisan tinker` (if Tinker is missing: `composer require laravel/tinker`), then paste each code block.
+
+**Important:** Use `\App\Models\Event::` (with leading backslash) instead of `Event::`. Laravel's built-in `Event` facade will otherwise cause "Method find does not exist" errors.
+
+**Note:** Use `dump()` to inspect output without exiting. If you use `dd()`, Tinker will exit and you must run `php artisan tinker` again.
+
+### Step 7: Test Relationships
+
+**▶️ Run in Tinker**
+
+```php
+// Test 1: Get all events organized by user ID 1
+$user = \App\Models\User::find(1);
+$events = $user->organizedEvents;
+dump($events);
+
+// Test 2: Get the organizer of event ID 1
+$event = \App\Models\Event::find(1);
+$organizer = $event->organizer;
+dump($organizer->name);
+
+// Test 3: Get all events in category ID 1
+$category = \App\Models\Category::find(1);
+$events = $category->events;
+dump($events);
+```
+
+### Step 8: Many-to-Many and Pivot Data
+
+**Run in Tinker**
+
+Register a user for an event and read pivot data:
+
+```php
+// Register a user for an event
+$user = \App\Models\User::find(1);
+$event = \App\Models\Event::find(1);
+
+$user->registeredEvents()->attach($event->id, [
+    'status' => 'confirmed',
+    'registered_at' => now(),
+]);
+
+// Get user's registered events with pivot data
+$registeredEvents = $user->registeredEvents;
+foreach ($registeredEvents as $regEvent) {
+    echo $regEvent->title . ' - ' . $regEvent->pivot->status . "\n";
+}
+
+// Get registration status for a specific event (use $event from above)
+$registeredEvent = $user->registeredEvents()
+    ->where('events.id', $event->id)
+    ->first();
+if ($registeredEvent) {
+    dump($registeredEvent->pivot->status);
+    dump($registeredEvent->pivot->registered_at);
+}
+
+// Get only confirmed registrations
+$confirmedRegistrations = $user->registeredEvents()
+    ->wherePivot('status', 'confirmed')
+    ->get();
+dump($confirmedRegistrations);
+```
+
+### Step 9: Eager Loading
+
+**Run in Tinker**
+
+Compare N+1 problem vs eager loading:
+
+```php
+// Bad: N+1 problem (don't do this)
+$events = \App\Models\Event::all();
+foreach ($events as $event) {
+    echo $event->organizer->name; // Queries database for each event
+    echo $event->category->name;  // Queries database for each event
+}
+
+// Good: Eager loading
+$events = \App\Models\Event::with('organizer', 'category')->get();
+foreach ($events as $event) {
+    echo $event->organizer->name; // No additional queries
+    echo $event->category->name;  // No additional queries
+}
+
+// Nested eager loading
+$events = \App\Models\Event::with('organizer.registeredEvents', 'category')->get();
+```
+
+### Step 10: Advanced Queries
+
+**Run in Tinker**
+
+```php
+// Use scopes
+$events = \App\Models\Event::published()->upcoming()->get();
+$events = \App\Models\Event::published()->byCategory(1)->get();
+$events = \App\Models\Event::published()
+    ->upcoming()
+    ->byCategory(1)
+    ->orderBy('date')
+    ->get();
+
+// Use accessor
+$event = \App\Models\Event::find(1);
+echo $event->full_date_time; // "March 15, 2024 at 2:00 PM"
+
+// Count relationships
+$count = \App\Models\User::find(1)->organizedEvents()->count();
+$count = \App\Models\Event::find(1)->registrants()->count();
+$count = \App\Models\Category::find(1)->events()->count();
+
+// Filter by relationship
+$events = \App\Models\User::find(1)
+    ->organizedEvents()
+    ->where('status', 'published')
+    ->get();
+$users = \App\Models\Event::find(1)->registrants;
+$events = \App\Models\Event::has('registrants', '>=', 5)->get();
+
+// Using whereHas
+$categories = \App\Models\Category::whereHas('events', function($query) {
+    $query->where('status', 'published');
+})->get();
+$events = \App\Models\Event::doesntHave('registrants')->get();
+$users = \App\Models\User::has('registeredEvents')->get();
+```
+
+---
+
+## Part E: Reference
+
+### Task List Summary
+
+- **Step 0** – Model setup (Event, User, Category)
+- **Step 1** – User model relationships
+- **Step 2** – Event model relationships
+- **Step 3** – Category model relationship
+- **Step 4** – Query scopes (Event)
+- **Step 5** – Accessors and mutators (Event)
+- **Step 6** – Helper methods (Event, User)
+- **Step 7** – Test relationships (Tinker)
+- **Step 8** – Many-to-many and pivot (Tinker)
+- **Step 9** – Eager loading (Tinker)
+- **Step 10** – Advanced queries (Tinker)
+
+### Resources
 
 - [Laravel Eloquent Relationships](https://laravel.com/docs/eloquent-relationships)
 - [Laravel Query Builder](https://laravel.com/docs/queries)
 - [Laravel Collections](https://laravel.com/docs/collections)
+
