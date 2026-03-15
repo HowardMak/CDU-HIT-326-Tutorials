@@ -26,11 +26,13 @@ class Event extends Model
 {
     use SoftDeletes;
 
+    // $fillable tells Laravel which fields are allowed to be filled when you create or update an event with a single array
     protected $fillable = [
         'title', 'slug', 'description', 'date', 'time', 'location',
         'capacity', 'status', 'image', 'category_id', 'organizer_id',
     ];
 
+    // $casts tells Laravel how to convert values when reading from and writing to the database. Here, it converts the date column into a date object (Carbon instance) instead of a raw string.
     protected $casts = [
         'date' => 'date',
     ];
@@ -59,6 +61,7 @@ Ensure `use App\Models\Event;` is at the top (add it if missing), then add these
  */
 public function organizedEvents()
 {
+    // It tells Laravel that one user can organize many events. The link is the organizer_id column on the events table.
     return $this->hasMany(Event::class, 'organizer_id');
 }
 
@@ -67,6 +70,8 @@ public function organizedEvents()
  */
 public function registeredEvents()
 {
+    // Defines a many-to-many link: a user can register for many events, and an event can have many registered users. The connection is stored in the registrations table, which also holds extra details (status, date registered, etc.).
+    // Like a class enrollment list: each row links a student (user) and a class (event), and has extra info such as enrollment status and date.
     return $this->belongsToMany(Event::class, 'registrations')
                 ->withPivot('status', 'registered_at')
                 ->withTimestamps();
@@ -92,6 +97,7 @@ Add these relationship methods:
  */
 public function category()
 {
+    // It tells Laravel that an event belongs to one category: each event is linked to a single category via its category_id column.
     return $this->belongsTo(Category::class);
 }
 
@@ -100,6 +106,7 @@ public function category()
  */
 public function organizer()
 {
+    // It tells Laravel that each event belongs to one user (the organizer). The link is the organizer_id column on the events table.
     return $this->belongsTo(User::class, 'organizer_id');
 }
 
@@ -108,6 +115,7 @@ public function organizer()
  */
 public function registrants()
 {
+    // An event can have many registered users (registrants). The registrations table records who is registered for each event and stores status and registration date. withPivot makes those extra columns available; withTimestamps lets Laravel manage the pivot table timestamps.
     return $this->belongsToMany(User::class, 'registrations')
                 ->withPivot('status', 'registered_at')
                 ->withTimestamps();
@@ -146,6 +154,7 @@ public function events()
  */
 public function scopePublished($query)
 {
+    // Adds a filter to the query so only events with status = 'published' are returned.
     return $query->where('status', 'published');
 }
 
@@ -154,6 +163,7 @@ public function scopePublished($query)
  */
 public function scopeUpcoming($query)
 {
+    // Adds a filter so only events on or after today’s date are returned. Past events are excluded.
     return $query->where('date', '>=', now()->toDateString());
 }
 
@@ -162,6 +172,7 @@ public function scopeUpcoming($query)
  */
 public function scopeByCategory($query, $categoryId)
 {
+    // Filters events so only those in a given category are returned. You pass the category ID as the argument.
     return $query->where('category_id', $categoryId);
 }
 ```
@@ -188,10 +199,14 @@ public function getFullDateTimeAttribute()
 ```php
 protected static function boot()
 {
+    // Before saving a new event, if no slug was provided, Laravel builds one from the title. For example, 'Laravel Workshop' becomes 'laravel-workshop'.
     parent::boot();
-
+    // static::creating(...) – Runs right before a new event is saved.
     static::creating(function ($event) {
+        // if (empty($event->slug)) – Only runs when no slug is set.
         if (empty($event->slug)) {
+            // Str::slug($event->title) – Turns the title into a slug.
+            // $event->slug = ... – Saves that value in the slug field.
             $event->slug = \Illuminate\Support\Str::slug($event->title);
         }
     });
@@ -227,8 +242,13 @@ public function isRegisteredBy($userId)
  */
 public function getConfirmedRegistrationsCountAttribute()
 {
+    // Counts how many people have confirmed registration for this event by looking at the status column in the registrations pivot table.
+
+    // $this->registrants() – Uses the event’s registrants relationship.
     return $this->registrants()
+        // ->wherePivot('status', 'confirmed') – Filters the pivot table so only rows with status = 'confirmed' are included.
         ->wherePivot('status', 'confirmed')
+        //->count() – Returns the number of matching rows
         ->count();
 }
 ```
