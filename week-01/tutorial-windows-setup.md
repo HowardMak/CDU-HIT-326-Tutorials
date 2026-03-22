@@ -128,6 +128,8 @@ Example (XAMPP):
    extension=fileinfo
    extension=zip
    ```
+   Some devices may have warnings about the packages above, and re-commenting them could solve the problem.
+
 4. Save the file
 5. Restart Apache (if using XAMPP/WAMP)
 
