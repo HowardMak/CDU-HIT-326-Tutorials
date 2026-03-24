@@ -46,7 +46,33 @@ node --version   # Should show v18.x.x or v20.x.x
 npm --version   # Should show 9.x.x or 10.x.x
 ```
 
-If `npm` is not found, Node.js is not on PATH. Restart your terminal; if it still fails, reinstall and ensure PATH is updated.
+#### If `npm` or `node` still fails after editing environment variables
+
+Adding PATH in Windows does **not** update terminals or editors that are already open. Try these in order:
+
+1. **Quit VS Code completely**, then reopen it and open a new terminal. Integrated terminals inherit the environment from when the editor started.
+
+2. **Open a new terminal outside the editor:** Win + R → type `powershell` → Enter. Run `node --version` and `npm --version` there. If it works in that window but not inside Cursor, the editor was started before PATH was updated—fully quit and reopen Cursor.
+
+3. **Refresh PATH in the current PowerShell session** (does not fix the editor until you restart it):
+
+   ```powershell
+   $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+   ```
+
+4. **Confirm Node is installed:** In PowerShell run `Test-Path "C:\Program Files\nodejs\npm.cmd"`. If this is `True`, Node is installed; PATH is the problem. If `False`, reinstall Node from [nodejs.org](https://nodejs.org).
+
+5. **Run npm by full path**:
+
+   ```powershell
+   & "C:\Program Files\nodejs\npm.cmd" --version
+   ```
+
+   You can prepend `C:\Program Files\nodejs` to PATH for the current session: `$env:Path += ";C:\Program Files\nodejs"`.
+
+6. **User vs System PATH:** If you lack permission to edit **System** variables, add `C:\Program Files\nodejs` under **User** variables → Path (same steps as above). Both are valid.
+
+7. **Restart the computer** if PATH still does not apply after closing all apps.
 
 ### 3. Project Setup
 
@@ -87,7 +113,7 @@ If you have already run Breeze before and want to redo it:
 - [ ] **Test Registration** - Create a test user account
 - [ ] **Test Login** - Verify login functionality works
 - [ ] **Customize Breeze Views** - (Optional) View file locations for reference
-- [ ] **Add Role-Based Navigation** - Show different menu items based on user role
+- [ ] **Add Role-Based Navigation** - (Optional) Defer until event/admin routes exist
 - [ ] **Protect Routes with Authentication** - (No action—Breeze already does this)
 - [ ] **Display User on Dashboard** - Show logged-in user's name and role on dashboard
 - [ ] **Test Authentication Flow** - Verify guest, authenticated, and role-based access
@@ -263,90 +289,19 @@ Breeze view files (for reference—no action required):
 - Dashboard: `resources/views/dashboard.blade.php`
 - Profile: `resources/views/profile/edit.blade.php`
 
-## Step 11: Add Role-Based Navigation
+## Step 11: Role-Based Navigation (Optional—skip for now)
 
-The nav links use `route('events.create')` and `route('admin.dashboard')`. Use `Route::has()` so the links only render when those routes exist—otherwise you get `RouteNotFoundException`.
+**You can skip this step.** Breeze authentication, registration with `role`, and the dashboard (Step 13) are enough for Week 4.
 
-### Option A: Add placeholder routes (recommended)
+Role-based menu links (`Create Event`, `Admin Panel`) need named routes that do not exist until you build event and admin features in a later week. Adding them now means placeholder routes and edits in three places in `navigation.blade.php`.
 
-**File:** `routes/web.php`
+**When you are ready** (after you have real `events.create` and `admin.dashboard` routes), follow **Optional: Role-based navigation (full instructions)** at the end of this document.
 
-**Where:** Inside the `Route::middleware(['auth', 'verified'])->group(function () { ... });` block—the same group that contains the dashboard route. Add these two routes inside that group:
-
-```php
-Route::get('/events/create', function () {
-    return view('dashboard');
-})->name('events.create');
-
-Route::get('/admin', function () {
-    return view('dashboard');
-})->name('admin.dashboard');
-```
-
-### Option B: Skip the routes for now
-
-If you prefer not to add placeholder routes, use `Route::has()` in the nav so the links only show when the routes exist. The app will not crash if the routes are missing.
-
-### Add role-based links to the navigation
-
-**File:** `resources/views/layouts/navigation.blade.php` (do **not** replace the whole file)
-
-### 1. Main nav (desktop)
-
-**Where:** In the `<!-- Navigation Links -->` section, **after** the line with `route('dashboard')` (the Dashboard nav link), add:
-
-```blade
-@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
-    <x-nav-link :href="route('events.create')" :active="request()->routeIs('events.create')">
-        {{ __('Create Event') }}
-    </x-nav-link>
-@endif
-@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
-    <x-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
-        {{ __('Admin Panel') }}
-    </x-nav-link>
-@endif
-```
-
-**Why `Route::has()`?** If the routes are not defined, `route('events.create')` throws `RouteNotFoundException`. `Route::has('events.create')` returns false in that case, so the link is not rendered and the app does not crash.
-
-### 2. Dropdown (desktop)
-
-**Where:** Inside `<x-slot name="content">`, **after** the line with `route('profile.edit')` (the Profile dropdown link), **before** the `<form method="POST" action="{{ route('logout') }}">`, add:
-
-```blade
-@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
-    <x-dropdown-link :href="route('events.create')">
-        {{ __('Create Event') }}
-    </x-dropdown-link>
-@endif
-@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
-    <x-dropdown-link :href="route('admin.dashboard')">
-        {{ __('Admin Panel') }}
-    </x-dropdown-link>
-@endif
-```
-
-### 3. Mobile menu
-
-**Where:** In the `<!-- Responsive Settings Options -->` section, inside `<div class="mt-3 space-y-1">`, **after** the line with `route('profile.edit')`, **before** the logout `<form>`, add:
-
-```blade
-@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
-    <x-responsive-nav-link :href="route('admin.dashboard')">
-        {{ __('Admin Panel') }}
-    </x-responsive-nav-link>
-@endif
-@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
-    <x-responsive-nav-link :href="route('events.create')">
-        {{ __('Create Event') }}
-    </x-responsive-nav-link>
-@endif
-```
+---
 
 ## Step 12: Protect Routes with Authentication
 
-Breeze already protects the dashboard, profile, and your placeholder routes with the `auth` middleware—no changes needed here.
+Breeze already protects the dashboard and profile with the `auth` middleware—no changes needed here.
 
 **For reference:** When you add new routes later (e.g. event CRUD), put them inside the same auth middleware group in `routes/web.php`, or add `->middleware('auth')` to individual routes.
 
@@ -379,12 +334,7 @@ The dashboard is only shown to logged-in users, so you can use `Auth::user()` di
    - Login
    - Access `/dashboard`
    - Should show dashboard
-3. **Test Role-Based Access:**
-
-   - Login as organizer
-   - Check if "Create Event" link appears
-   - Login as attendee
-   - Check if "Create Event" link is hidden
+3. **Roles (optional):** If you added Step 11 navigation links, log in as organizer vs attendee and confirm the menu matches role. If you skipped Step 11, confirm Step 13 shows the correct `role` on the dashboard after registering with different roles.
 
 ## What Breeze Provides
 
@@ -430,6 +380,84 @@ resources/
     └── components/
         └── auth-session-status.blade.php
 ```
+
+## Optional: Role-based navigation (full instructions)
+
+Use this **after** you have named routes `events.create` and `admin.dashboard` (real controllers or placeholders).
+
+### 1. Placeholder routes (if you do not have real pages yet)
+
+**File:** `routes/web.php`
+
+**Where:** Inside `Route::middleware(['auth', 'verified'])->group(function () { ... });` (same group as dashboard):
+
+```php
+Route::get('/events/create', function () {
+    return view('dashboard');
+})->name('events.create');
+
+Route::get('/admin', function () {
+    return view('dashboard');
+})->name('admin.dashboard');
+```
+
+### 2. Navigation snippets
+
+**File:** `resources/views/layouts/navigation.blade.php` (do **not** replace the whole file)
+
+Use `Route::has()` so missing routes do not crash the page.
+
+**Main nav (desktop):** In `<!-- Navigation Links -->`, after the Dashboard `x-nav-link`, add:
+
+```blade
+@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
+    <x-nav-link :href="route('events.create')" :active="request()->routeIs('events.create')">
+        {{ __('Create Event') }}
+    </x-nav-link>
+@endif
+@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
+    <x-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
+        {{ __('Admin Panel') }}
+    </x-nav-link>
+@endif
+```
+
+**Dropdown (desktop):** Inside `<x-slot name="content">`, after `route('profile.edit')`, before the logout `<form>`:
+
+```blade
+@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
+    <x-dropdown-link :href="route('events.create')">
+        {{ __('Create Event') }}
+    </x-dropdown-link>
+@endif
+@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
+    <x-dropdown-link :href="route('admin.dashboard')">
+        {{ __('Admin Panel') }}
+    </x-dropdown-link>
+@endif
+```
+
+**Mobile menu:** In `<!-- Responsive Settings Options -->`, inside `<div class="mt-3 space-y-1">`, after `route('profile.edit')`, before logout `<form>`:
+
+```blade
+@if(Auth::user()->role === 'admin' && Route::has('admin.dashboard'))
+    <x-responsive-nav-link :href="route('admin.dashboard')">
+        {{ __('Admin Panel') }}
+    </x-responsive-nav-link>
+@endif
+@if(Auth::user()->role === 'organizer' && Route::has('events.create'))
+    <x-responsive-nav-link :href="route('events.create')">
+        {{ __('Create Event') }}
+    </x-responsive-nav-link>
+@endif
+```
+
+### 3. If you see no new links
+
+1. Routes must exist (`php artisan route:list` should list `events.create` and `admin.dashboard`).
+2. User role must be `organizer` or `admin` (not `attendee`).
+3. Add snippets in **all three** places (main nav is hidden on small screens).
+4. Rare: `php artisan view:clear`
 
 ## Common Customizations
 
