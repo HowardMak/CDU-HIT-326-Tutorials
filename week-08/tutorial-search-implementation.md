@@ -37,6 +37,8 @@ public function scopeSearch($query, $term)
 
 ## Step 2: Update Index Method with Search and Filters
 
+> **This replaces the `index` method you wrote in Week 7.** It keeps the role-based visibility logic from Week 7 and adds search, date range, and pagination parameter preservation.
+
 Open `app/Http/Controllers/EventController.php` and update the `index` method:
 
 ```php
@@ -44,7 +46,19 @@ public function index(Request $request)
 {
     $query = Event::query();
 
-    // Search functionality
+    // Access control from Week 7 — keep published-only for guests/attendees,
+    // allow organizers to filter by status.
+    if (!auth()->check() || !auth()->user()->isOrganizer()) {
+        // Guests and regular attendees can only see published events.
+        $query->published();
+    } else {
+        // Organizers can see all statuses, with an optional status filter.
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+    }
+
+    // NEW: Search across title, description, and location.
     if ($request->filled('search')) {
         $query->search($request->search);
     }
@@ -54,7 +68,7 @@ public function index(Request $request)
         $query->byCategory($request->category);
     }
 
-    // Filter by date range
+    // Filter by date range (added date_to compared to Week 7)
     if ($request->filled('date_from')) {
         $query->where('date', '>=', $request->date_from);
     }
@@ -63,16 +77,11 @@ public function index(Request $request)
         $query->where('date', '<=', $request->date_to);
     }
 
-    // Show published events to guests, all to organizers
-    if (!auth()->check() || !auth()->user()->isOrganizer()) {
-        $query->published();
-    }
-
-    // Eager load relationships
+    // NEW: appends() preserves search/filter params across paginated pages.
     $events = $query->with('organizer', 'category')
         ->latest('date')
         ->paginate(15)
-        ->appends($request->query()); // Preserve search parameters
+        ->appends($request->query());
 
     $categories = Category::all();
 

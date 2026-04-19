@@ -215,86 +215,17 @@ Run with verbose output:
 php artisan test --verbose
 ```
 
-## Step 5: Install Laravel Debugbar
+## Steps 5–8: Debugging Tools
 
-Install Debugbar for debugging:
+> **These debugging tools are covered in full detail in `week-10/tutorial-debugging-tools.md`.** Refer to that tutorial for Debugbar, Logging, `dd()`/`dump()`, Query Logging, and Telescope.
 
-```bash
-composer require barryvdh/laravel-debugbar --dev
-```
+When debugging a failing test, the most useful tools are:
 
-Debugbar will automatically appear in development mode showing:
+- **`dd()` inside the controller** — dump the value that the test is triggering and stop execution
+- **Query Logging** — check what SQL the test causes (`DB::enableQueryLog()` then `dd(DB::getQueryLog())`)
+- **`tail -f storage/logs/laravel.log`** — watch the log file while running tests
 
-- All database queries
-- Route information
-- View data
-- Session data
-- Request/Response information
-
-## Step 6: Use Logging for Debugging
-
-Add logging to your code. In `app/Http/Controllers/EventController.php`:
-
-```php
-use Illuminate\Support\Facades\Log;
-
-public function store(Request $request)
-{
-    Log::info('Creating event', [
-        'user_id' => auth()->id(),
-        'title' => $request->title,
-    ]);
-
-    // ... create event logic ...
-
-    Log::info('Event created', ['event_id' => $event->id]);
-
-    return redirect()->route('events.show', $event);
-}
-```
-
-View logs:
-
-```bash
-tail -f storage/logs/laravel.log
-```
-
-## Step 7: Use dd() and dump() for Quick Debugging
-
-Add temporary debugging:
-
-```php
-public function index()
-{
-    $events = Event::all();
-  
-    // Dump and die - stops execution
-    dd($events);
-  
-    // Or dump without stopping
-    dump($events);
-  
-    return view('events.index', compact('events'));
-}
-```
-
-## Step 8: Enable Query Logging
-
-Log all database queries:
-
-```php
-use Illuminate\Support\Facades\DB;
-
-public function index()
-{
-    DB::enableQueryLog();
-
-    $events = Event::with('organizer', 'category')->get();
-
-    // View all queries
-    dd(DB::getQueryLog());
-}
-```
+> **Important:** Remove all `dd()` and `dump()` calls before committing — they will make your test suite hang.
 
 ## Step 9: Test File Uploads
 

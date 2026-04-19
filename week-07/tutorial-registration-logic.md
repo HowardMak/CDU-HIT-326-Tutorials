@@ -36,18 +36,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class RegistrationController extends Controller
 {
     public function store(Request $request, Event $event)
     {
-        // Check if user is authenticated
-        if (!auth()->check()) {
+        // Check if user is authenticated (Auth facade — IDE-friendly)
+        if (! Auth::check()) {
             return redirect()->route('login')
                 ->with('error', 'Please login to register for events.');
         }
 
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Check if already registered
         if ($event->registrants->contains($user->id)) {
@@ -85,7 +86,7 @@ class RegistrationController extends Controller
 
     public function destroy(Event $event)
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Check if user is registered
         if (!$event->registrants->contains($user->id)) {
@@ -245,12 +246,13 @@ Open `app/Http/Controllers/DashboardController.php`:
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $user = auth()->user();
+        $user = Auth::user();
   
         $query = $user->registeredEvents()
             ->with('category', 'organizer');
