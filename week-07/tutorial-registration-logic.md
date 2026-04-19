@@ -124,9 +124,12 @@ public function isFull()
  */
 public function getConfirmedRegistrationsCountAttribute()
 {
-    return $this->registrations()
-        ->where('status', 'confirmed')
-        ->count();
+    // If the relation is already loaded (e.g. via withCount or eager load),
+    // filter the collection to avoid an extra DB query per event (N+1).
+    if ($this->relationLoaded('registrants')) {
+        return $this->registrants->where('pivot.status', 'confirmed')->count();
+    }
+    return $this->registrants()->wherePivot('status', 'confirmed')->count();
 }
 
 /**
@@ -151,10 +154,12 @@ public function getAvailableSpotsAttribute()
 
 ## Step 4: Add Registration Routes
 
-Open `routes/web.php` and add:
+Open `routes/web.php` and add the `use` imports at the **top of the file** alongside the other imports, then add the routes:
 
 ```php
+// Add these use statements at the top of web.php (missing imports cause "route not defined" errors)
 use App\Http\Controllers\RegistrationController;
+use App\Http\Controllers\DashboardController;
 
 Route::middleware(['auth'])->group(function () {
     Route::post('/events/{event}/register', [RegistrationController::class, 'store'])
@@ -167,66 +172,74 @@ Route::middleware(['auth'])->group(function () {
 ## Step 5: Add Registration Button to Event Show Page
 
 Update `resources/views/events/show.blade.php`:
+Add it after the event details grid
 
 ```blade
-@auth
-    @php
-        $isRegistered = $event->registrants->contains(auth()->id());
-    @endphp
+<div class="mt-6">
+    @auth
+        @php
+            $isRegistered = $event->registrants->contains(auth()->id());
+        @endphp
 
-    @if(!$isRegistered && $event->status === 'published')
-        @if($event->isFull())
-            <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-                <p>Event is full. You can join the waitlist.</p>
+        @if(!$isRegistered && $event->status === 'published')
+            @if($event->isFull())
+                <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+                    <p>Event is full. You can join the waitlist.</p>
+                </div>
+                <form method="POST" action="{{ route('events.register', $event) }}">
+                    @csrf
+                    <button type="submit" class="btn-primary">
+                        Join Waitlist
+                    </button>
+                </form>
+            @else
+                <form method="POST" action="{{ route('events.register', $event) }}">
+                    @csrf
+                    <button type="submit" class="btn-primary">
+                        Register for Event
+                    </button>
+                </form>
+            @endif
+        @elseif(!$isRegistered)
+            {{-- Event exists but is not published — show a notice instead of silently hiding the button --}}
+            <div class="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded mb-4">
+                <p>Registration is not available for this event.</p>
             </div>
-            <form method="POST" action="{{ route('events.register', $event) }}">
+        @elseif($isRegistered)
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                <p>You are registered for this event.</p>
+            </div>
+            <form method="POST" action="{{ route('events.unregister', $event) }}">
                 @csrf
-                <button type="submit" class="btn-primary">
-                    Join Waitlist
-                </button>
-            </form>
-        @else
-            <form method="POST" action="{{ route('events.register', $event) }}">
-                @csrf
-                <button type="submit" class="btn-primary">
-                    Register for Event
+                @method('DELETE')
+                <button type="submit" class="btn-danger">
+                    Cancel Registration
                 </button>
             </form>
         @endif
-    @elseif($isRegistered)
-        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            <p>You are registered for this event.</p>
-        </div>
-        <form method="POST" action="{{ route('events.unregister', $event) }}">
-            @csrf
-            @method('DELETE')
-            <button type="submit" class="btn-danger">
-                Cancel Registration
-            </button>
-        </form>
-    @endif
-@else
-    <a href="{{ route('login') }}" class="btn-primary">
-        Login to Register
-    </a>
-@endauth
+    @else
+        <a href="{{ route('login') }}" class="btn-primary">
+            Login to Register
+        </a>
+    @endauth
 
-<!-- Show registration count -->
-<div class="mt-4">
-    <p class="text-sm text-gray-600">
-        <strong>Registrations:</strong> 
-        {{ $event->confirmed_registrations_count }} 
-        @if($event->capacity > 0)
-            / {{ $event->capacity }}
-        @else
-            (Unlimited)
-        @endif
-    </p>
-    @if($event->capacity > 0 && !$event->isFull())
-        <p class="text-sm text-green-600">
-            {{ $event->available_spots }} spots available
+    <!-- Show registration count -->
+    <div class="mt-4">
+        <p class="text-sm text-gray-600">
+            <strong>Registrations:</strong> 
+            {{ $event->confirmed_registrations_count }} 
+            @if($event->capacity > 0)
+                / {{ $event->capacity }}
+            @else
+                (Unlimited)
+            @endif
         </p>
-    @endif
+        @if($event->capacity > 0 && !$event->isFull())
+            <p class="text-sm text-green-600">
+                {{ $event->available_spots }} spots available
+            </p>
+        @endif
+    </div>
 </div>
 ```
 
@@ -448,6 +461,8 @@ Create `resources/views/events/registrants.blade.php`:
 
 In `resources/views/events/show.blade.php`, add for organizers:
 
+Put it in the existing organizer buttons area (<div class="flex gap-2">), alongside the Edit and Delete buttons:
+
 ```blade
 @can('update', $event)
     <div class="mb-4">
@@ -485,23 +500,27 @@ In `resources/views/events/show.blade.php`, add for organizers:
 
 ## Step 13: Add Registration Count to Event Index
 
-Update `resources/views/events/index.blade.php` to show registration count:
+**First**, update `EventController::index()` to eager-load the registrants relation so the count accessor doesn't fire a separate query per event card (N+1):
+
+```php
+$events = Event::with(['organizer', 'category', 'registrants'])
+    ->where('status', 'published')
+    ->orderBy('date')
+    ->paginate(12);
+```
+
+**Then**, update `resources/views/events/index.blade.php` to show the count:
+
+Add the registration count inside the existing `<div class="text-sm text-gray-500 space-y-1">`, after the other details:
 
 ```blade
-@foreach($events as $event)
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <!-- Event details -->
-        <div class="text-sm text-gray-600">
-            <p>
-                <strong>Registrations:</strong> 
-                {{ $event->confirmed_registrations_count }}
-                @if($event->capacity > 0)
-                    / {{ $event->capacity }}
-                @endif
-            </p>
-        </div>
-    </div>
-@endforeach
+<p>
+    <strong>Registrations:</strong> 
+    {{ $event->confirmed_registrations_count }}
+    @if($event->capacity > 0)
+        / {{ $event->capacity }}
+    @endif
+</p>
 ```
 
 ## Complete Registration Flow
@@ -515,3 +534,30 @@ Update `resources/views/events/index.blade.php` to show registration count:
 3. **Registration created** → Status set to 'confirmed' or 'waitlisted'
 4. **User sees confirmation** → Redirected with success message
 5. **User views dashboard** → Sees all registered events
+
+## Troubleshooting
+
+**Button not visible (silent gap)**
+- Cause: `@if(!$isRegistered && $event->status === 'published')` has no fallback — if the event isn't published, nothing renders.
+- Fix: Add `@elseif(!$isRegistered)` to show a "Registration not available" notice.
+
+**`isFull()` — undefined method error**
+- Cause: `getConfirmedRegistrationsCountAttribute()` called `$this->registrations()`, which doesn't exist. The correct relationship is `registrants()`.
+- Fix: Use `$this->registrants()->wherePivot('status', 'confirmed')->count()`.
+
+**Route `events.register` not defined**
+- Cause: `RegistrationController` and `DashboardController` used in `web.php` without `use` imports — Laravel can't resolve the class.
+- Fix: Add the missing `use` statements at the top of `web.php`.
+
+**Registration count not showing on index page (N+1 query)**
+- Cause 1: `EventController::index()` only eager loaded `organizer` and `category` — the `confirmed_registrations_count` accessor fired a new COUNT query for every event card.
+- Cause 2: The accessor always called `$this->registrants()->wherePivot(...)` (fresh query) even when registrants were already loaded.
+- Fix 1: Add `'registrants'` to the `with([...])` call in `EventController::index()`.
+- Fix 2: In the accessor, check `$this->relationLoaded('registrants')` first and filter the collection instead of hitting the DB again.
+
+**Controller method still undefined after adding imports**
+- Cause: Stale compiled class/route cache from before the imports were added.
+- Fix: Run the following, then restart `php artisan serve`:
+  ```bash
+  composer dump-autoload && php artisan optimize:clear
+  ```
