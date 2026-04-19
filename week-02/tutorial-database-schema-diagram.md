@@ -10,6 +10,7 @@
 - [ ] **Create Registrations Table Migration** - Build pivot table for user-event registrations
 - [ ] **Run All Migrations** - Execute migrations to create database tables
 - [ ] **Verify Database Structure** - Check that all tables were created correctly
+- [ ] **Create Eloquent Models** - Create Category and Event models (User model exists by default)
 - [ ] **Create Category Seeder** - Generate seeder for sample categories
 - [ ] **Create User Seeder** - Generate seeder for sample users with different roles
 - [ ] **Create Event Seeder** - Generate seeder for sample events
@@ -51,6 +52,11 @@ The users table already exists from Laravel's default migration. We need to add 
 
 ```bash
 php artisan make:migration add_role_to_users_table --table=users
+
+# php artisan – run an Artisan command.
+# make:migration – Artisan subcommand to create a migration.
+# add_role_to_users_table – name for the migration (used in the filename).
+# --table=users – (optional) the existing table this migration will change.
 ```
 
 Open the created migration file in `database/migrations/` and add:
@@ -69,7 +75,7 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->enum('role', ['admin', 'organizer', 'attendee'])
                   ->default('attendee')
-                  ->after('password');
+                  ->after('password'); //  tells the schema builder where to place the new column in the table
         });
     }
 
@@ -103,9 +109,9 @@ return new class extends Migration
     {
         Schema::create('categories', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique();
+            $table->string('name')->unique(); // enforces a unique constraint on that column: every value in the column must be different
             $table->string('slug')->unique();
-            $table->text('description')->nullable();
+            $table->text('description')->nullable(); // means the column may be NULL — it does not have to have a value.
             $table->timestamps();
         });
     }
@@ -144,13 +150,13 @@ return new class extends Migration
             $table->date('date');
             $table->time('time');
             $table->string('location');
-            $table->unsignedInteger('capacity')->default(0);
+            $table->unsignedInteger('capacity')->default(0); // creates an integer column that cannot be negative; it only holds 0 and positive whole numbers.
             $table->enum('status', ['draft', 'published', 'cancelled'])->default('draft');
             $table->string('image')->nullable();
-            $table->foreignId('category_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('category_id')->nullable()->constrained('categories')->onDelete('set null');
             $table->foreignId('organizer_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
-            $table->softDeletes();
+            $table->softDeletes(); // adds a deleted_at column and makes “deletions” reversible. Rows are hidden from normal queries instead of being removed from the database.
     
             // Indexes for better query performance
             $table->index('date');
@@ -158,7 +164,7 @@ return new class extends Migration
             $table->index('organizer_id');
             $table->index('category_id');
     
-            // Full-text search index (MySQL 5.6+)
+            // Creates a full-text index on those columns so the database can do natural-language search over them, instead of simple equality or prefix matching.
             $table->fullText(['title', 'description', 'location']);
         });
     }
@@ -248,10 +254,11 @@ php artisan migrate:status
 Or check directly in MySQL:
 
 ```bash
-mysql -u root -p events_management
+mysql -u root -p
 ```
 
 ```sql
+USE events_management;
 SHOW TABLES;
 DESCRIBE users;
 DESCRIBE categories;
@@ -260,12 +267,28 @@ DESCRIBE registrations;
 EXIT;
 ```
 
-## Step 9: Create Seeders for Sample Data
+## Step 9: Create Eloquent Models
+
+Seeders use Eloquent models (`Category`, `Event`) to insert data. The `User` model already exists in Laravel. Create the missing models before creating seeders:
+
+```bash
+php artisan make:model Category
+php artisan make:model Event
+```
+
+Laravel places models in `app/Models/` and assumes table names (`categories`, `events`) by convention, so no extra configuration is needed.
+
+## Step 10: Create Seeders for Sample Data
 
 ### Create Category Seeder
 
 ```bash
 php artisan make:seeder CategorySeeder
+
+# Creates a new database seeder that Laravel uses to insert predefined data into your tables.
+# php artisan	Runs Laravel’s Artisan CLI
+# make:seeder   Subcommand to create a new seeder class
+# CategorySeeder Name of the seeder (convention: <Model>Seeder)
 ```
 
 Open `database/seeders/CategorySeeder.php`:
@@ -294,6 +317,8 @@ class CategorySeeder extends Seeder
         foreach ($categories as $category) {
             Category::create([
                 'name' => $category['name'],
+                // Str::slug takes a readable string and returns a slug suitable for URLs and identifiers
+                // 'Workshops & Training'-> 'workshops-training'
                 'slug' => Str::slug($category['name']),
                 'description' => $category['description'],
             ]);
@@ -375,7 +400,7 @@ use App\Models\Event;
 use App\Models\User;
 use App\Models\Category;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
+use Carbon\Carbon; // Carbon is a date/time library built on PHP’s DateTime
 
 class EventSeeder extends Seeder
 {
@@ -427,7 +452,7 @@ class EventSeeder extends Seeder
 }
 ```
 
-## Step 10: Update DatabaseSeeder
+## Step 11: Update DatabaseSeeder
 
 Open `database/seeders/DatabaseSeeder.php`:
 
@@ -451,7 +476,7 @@ class DatabaseSeeder extends Seeder
 }
 ```
 
-## Step 11: Run Seeders
+## Step 12: Run Seeders
 
 Run all seeders to populate the database:
 
@@ -467,34 +492,7 @@ php artisan db:seed --class=UserSeeder
 php artisan db:seed --class=EventSeeder
 ```
 
-## Step 12: Verify Data
-
-Check that data was seeded correctly:
-
-```bash
-php artisan tinker
-```
-
-Then in Tinker:
-
-```php
-// Check categories
-Category::count();
-Category::all();
-
-// Check users
-User::count();
-User::all();
-
-// Check events
-Event::count();
-Event::with('organizer', 'category')->get();
-
-// Check a specific event
-$event = Event::first();
-$event->organizer->name;
-$event->category->name;
-```
+## Step 13: Verify Data
 
 ## Database Schema Overview
 

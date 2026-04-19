@@ -45,16 +45,6 @@ Homebrew is a package manager for macOS that makes installing development tools 
    ```
 4. You should see PHP version 8.1 or higher
 
-### Enable Required PHP Extensions
-
-Laravel requires several PHP extensions. Most are included, but verify:
-
-```bash
-php -m | grep -E "openssl|pdo_mysql|mbstring|tokenizer|xml|ctype|json|bcmath|fileinfo"
-```
-
-All extensions should be listed. If any are missing, they're usually enabled by default in Homebrew PHP.
-
 ## Step 3: Install MySQL
 
 1. Open Terminal
@@ -175,18 +165,6 @@ sudo mv composer.phar /usr/local/bin/composer
    DB_DATABASE=events_management
    DB_USERNAME=root
    DB_PASSWORD=your_mysql_password
-   ```
-6. Create the database in MySQL:
-
-   ```bash
-   mysql -u root -p
-   ```
-
-   Then in MySQL:
-
-   ```sql
-   CREATE DATABASE events_management;
-   exit;
    ```
 
 ## Step 8: Run Initial Migrations
