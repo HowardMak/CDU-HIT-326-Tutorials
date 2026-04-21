@@ -11,6 +11,7 @@
 - [ ] **Create User Dashboard Controller** - Generate DashboardController for registered events
 - [ ] **Create Dashboard View** - Build view to display user's registered events with filters
 - [ ] **Add Dashboard Route** - Configure route for user dashboard
+- [ ] **Add isAdmin() and Create EventPolicy** - Allow admins and organizers to manage events
 - [ ] **Create Organizer View for Registrants** - Add method to view all event registrants
 - [ ] **Create Registrants View** - Build view to display list of event registrants
 - [ ] **Add Link to View Registrants** - Add navigation link for organizers to view registrants
@@ -339,7 +340,7 @@ Update `resources/views/dashboard.blade.php`:
                             </span>
                         </p>
                         <p class="text-xs text-gray-500">
-                            Registered: {{ $event->pivot->registered_at->format('M d, Y') }}
+                            Registered: {{ \Carbon\Carbon::parse($event->pivot->registered_at)->format('M d, Y') }}
                         </p>
                     </div>
                 @endforeach
@@ -372,7 +373,64 @@ Route::middleware(['auth'])->group(function () {
 });
 ```
 
-## Step 9: Create Organizer View for Registrants
+## Step 9: Add isAdmin() to User Model and Create EventPolicy
+
+### Add isAdmin() to User Model
+
+Open `app/Models/User.php` and add this method:
+
+```php
+public function isAdmin(): bool
+{
+    return $this->role === 'admin';
+}
+```
+
+### Create EventPolicy
+
+```bash
+php artisan make:policy EventPolicy --model=Event
+```
+
+Open `app/Policies/EventPolicy.php` and replace its contents with:
+
+```php
+<?php
+
+namespace App\Policies;
+
+use App\Models\Event;
+use App\Models\User;
+
+class EventPolicy
+{
+    public function update(User $user, Event $event): bool
+    {
+        return $user->isAdmin() || $user->id === $event->organizer_id;
+    }
+
+    public function viewRegistrants(User $user, Event $event): bool
+    {
+        return $user->isAdmin() || $user->id === $event->organizer_id;
+    }
+}
+```
+
+### Register the Policy
+
+In `app/Providers/AuthServiceProvider.php`, add to the `$policies` array:
+
+```php
+use App\Models\Event;
+use App\Policies\EventPolicy;
+
+// inside the class:
+protected $policies = [
+    Event::class => EventPolicy::class,
+];
+```
+
+## Step 10: Create Organizer View for Registrants
 
 Add method to `EventController.php`:
 
@@ -398,7 +456,7 @@ Route::get('/events/{event}/registrants', [EventController::class, 'registrants'
     ->middleware('auth');
 ```
 
-## Step 10: Create Registrants View
+## Step 11: Create Registrants View
 
 Create `resources/views/events/registrants.blade.php`:
 
@@ -445,7 +503,7 @@ Create `resources/views/events/registrants.blade.php`:
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                {{ $registrant->pivot->registered_at->format('M d, Y H:i') }}
+                                {{ \Carbon\Carbon::parse($registrant->pivot->registered_at)->format('M d, Y H:i') }}
                             </td>
                         </tr>
                     @endforeach
@@ -457,7 +515,7 @@ Create `resources/views/events/registrants.blade.php`:
 @endsection
 ```
 
-## Step 11: Add Link to View Registrants
+## Step 12: Add Link to View Registrants
 
 In `resources/views/events/show.blade.php`, add for organizers:
 
@@ -473,7 +531,7 @@ Put it in the existing organizer buttons area (<div class="flex gap-2">), alongs
 @endcan
 ```
 
-## Step 12: Test Registration Flow
+## Step 13: Test Registration Flow
 
 1. **Test Registration:**
 
@@ -498,7 +556,7 @@ Put it in the existing organizer buttons area (<div class="flex gap-2">), alongs
    - Click "Cancel Registration"
    - Verify registration is removed
 
-## Step 13: Add Registration Count to Event Index
+## Step 14: Add Registration Count to Event Index
 
 **First**, update `EventController::index()` to eager-load the registrants relation so the count accessor doesn't fire a separate query per event card (N+1):
 
@@ -561,3 +619,17 @@ Add the registration count inside the existing `<div class="text-sm text-gray-50
   ```bash
   composer dump-autoload && php artisan optimize:clear
   ```
+
+**`format()` called on string — pivot `registered_at` crashes**
+- Cause: The `registered_at` column on the `registrations` pivot table is returned as a plain string, not a Carbon instance — there is no `$casts` or `withPivotValue` that auto-casts pivot attributes.
+- Fix: Wrap the value with `\Carbon\Carbon::parse()` before calling `->format()` in any view that uses it:
+  - `dashboard.blade.php` — `{{ \Carbon\Carbon::parse($event->pivot->registered_at)->format('M d, Y') }}`
+  - `registrants.blade.php` — `{{ \Carbon\Carbon::parse($registrant->pivot->registered_at)->format('M d, Y H:i') }}`
+
+**"View Registrants" button never shows for admins**
+- Cause: The button was wrapped in `@can('update', $event)`, but no `EventPolicy` existed — Laravel defaults to denying every gate check when there is no policy for the model.
+- Fix: Create `EventPolicy` (Step 9) with an `update` method that returns `true` for admins (`isAdmin()`) and the event's organizer. Add `isAdmin()` to `User.php` checking `role === 'admin'`.
+
+**403 Unauthorized on `/events/{id}/registrants`**
+- Cause: The controller called `$this->authorize('viewRegistrants', $event)`, but `EventPolicy` only had `update` — the missing method caused Laravel to deny everyone.
+- Fix: Add a `viewRegistrants` method to `EventPolicy` with the same logic as `update` (admin or organizer). Both methods are included in the Step 9 policy scaffold.
