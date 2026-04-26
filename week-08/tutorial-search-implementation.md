@@ -39,6 +39,17 @@ public function scopeSearch($query, $term)
 
 > **This replaces the `index` method you wrote in Week 7.** It keeps the role-based visibility logic from Week 7 and adds search, date range, and pagination parameter preservation.
 
+> **Prerequisite — add `isOrganizer()` to the User model first.**
+> The `index` method below calls `auth()->user()->isOrganizer()`. If that method is missing you will get a `BadMethodCallException` and a 500 error on the `/events` page. Open `app/Models/User.php` and add this method before continuing:
+>
+> ```php
+> public function isOrganizer(): bool
+> {
+>     // Treat both admins and organizers as organizers for visibility purposes
+>     return in_array($this->role, ['admin', 'organizer']);
+> }
+> ```
+
 Open `app/Http/Controllers/EventController.php` and update the `index` method:
 
 ```php
@@ -152,7 +163,7 @@ Update `resources/views/events/index.blade.php` to include search and filter for
                 </div>
             </div>
 
-            <div class="mt-4 flex space-x-2">
+            <div class="mt-4 flex space-x-2 gap-4">
                 <button type="submit" class="btn-primary">Search</button>
                 <a href="{{ route('events.index') }}" class="btn-secondary">Clear Filters</a>
             </div>
@@ -233,61 +244,91 @@ Open `app/Http/Controllers/CategoryController.php`:
 
 namespace App\Http\Controllers;
 
+// Import the Category model so we can query the categories table
 use App\Models\Category;
+// Import Request so we can receive and validate form data
 use Illuminate\Http\Request;
+// Import Str so we can generate URL-friendly slugs (e.g. "My Category" -> "my-category")
 use Illuminate\Support\Str;
 
 class CategoryController extends Controller
 {
+    // This runs automatically before every method in this controller
     public function __construct()
     {
+        // Only logged-in users can access any category page
         $this->middleware('auth');
+        // On top of that, only admins are allowed (regular users are blocked)
         $this->middleware('role:admin');
     }
 
+    // Shows the list of all categories (GET /categories)
     public function index()
     {
+        // Fetch all categories from the database, 15 per page.
+        // withCount('events') adds an extra column telling us how many events
+        // belong to each category — useful for displaying in the table.
         $categories = Category::withCount('events')->paginate(15);
+
+        // Pass the $categories variable to the view so the blade template can loop over it
         return view('categories.index', compact('categories'));
     }
 
+    // Saves a brand-new category submitted from the create form (POST /categories)
     public function store(Request $request)
     {
+        // Validate the incoming form data before touching the database.
+        // 'required' = field must not be empty
+        // 'unique:categories' = the name must not already exist in the categories table
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:categories',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string', // description is optional
         ]);
 
+        // Insert a new row into the categories table.
+        // Str::slug() converts the name into a URL-safe string, e.g. "My Category" -> "my-category"
         Category::create([
             'name' => $validated['name'],
             'slug' => Str::slug($validated['name']),
             'description' => $validated['description'],
         ]);
 
+        // Send the admin back to the category list with a success message
         return redirect()->route('categories.index')
             ->with('success', 'Category created successfully.');
     }
 
+    // Saves changes to an existing category (PUT /categories/{category})
+    // Laravel automatically finds the Category record matching the ID in the URL
     public function update(Request $request, Category $category)
     {
+        // Same validation as store, but the unique check ignores the *current* category's
+        // own row so it doesn't falsely report a duplicate when the name hasn't changed.
+        // The ", $category->id" part tells Laravel: "skip this ID when checking uniqueness"
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
             'description' => 'nullable|string',
         ]);
 
+        // Update only the columns we care about; leave everything else untouched
         $category->update([
             'name' => $validated['name'],
-            'slug' => Str::slug($validated['name']),
+            'slug' => Str::slug($validated['name']), // regenerate slug in case the name changed
             'description' => $validated['description'],
         ]);
 
+        // Redirect back to the list with a success message
         return redirect()->route('categories.index')
             ->with('success', 'Category updated successfully.');
     }
 
+    // Deletes a category from the database (DELETE /categories/{category})
     public function destroy(Category $category)
     {
+        // Remove this category's row from the database permanently
         $category->delete();
+
+        // Send the admin back to the category list with a confirmation message
         return redirect()->route('categories.index')
             ->with('success', 'Category deleted successfully.');
     }
@@ -301,6 +342,9 @@ In `routes/web.php`:
 ```php
 use App\Http\Controllers\CategoryController;
 
+// Apply two protection layers to every route inside this group:
+//   'auth'       – the user must be logged in
+//   'role:admin' – the user must also have the admin role
 Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::resource('categories', CategoryController::class);
 });
@@ -308,7 +352,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
 ## Step 6: Add Category Navigation
 
-Update your navigation to show categories. In `resources/views/layouts/navigation.blade.php` or main layout:
+Update your navigation to show categories. In `resources/views/layouts/navigation.blade.php` at the end of the navigation links:
 
 ```blade
 <div class="flex space-x-4">
@@ -341,6 +385,8 @@ public function boot(): void
 Create a helper function. In `app/Helpers/helpers.php` (create if doesn't exist):
 
 ```php
+<?php
+
 if (!function_exists('highlight')) {
     function highlight($text, $search)
     {
@@ -409,7 +455,7 @@ Use in Blade:
 
 ## Step 9: Add Search Results Count
 
-Update the index view to show result count:
+Update the index view to show result count. Put it between the "Active filters" block and the "Events List":
 
 ```blade
 <div class="mb-4">
